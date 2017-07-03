@@ -1,0 +1,31 @@
+{
+  "name": "sparcsssofornodejs",
+  "version": "1.0.0",
+  "description": "Make SPARCS SSO Great",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spacebarley/sparcsssoforNodeJs.git"
+  },
+  "author": "jambo, samjo, yujingaya",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/spacebarley/sparcsssoforNodeJs/issues"
+  },
+  "homepage": "https://github.com/spacebarley/sparcsssoforNodeJs#readme",
+  "dependencies": {
+    "crypto": "0.0.3",
+    "eslint": "^3.19.0",
+    "eslint-config-airbnb": "^15.0.1",
+    "eslint-plugin-import": "^2.2.0",
+    "eslint-plugin-jsx-a11y": "^5.1.0",
+    "eslint-plugin-react": "^7.0.1",
+    "express": "^4.15.3",
+    "express-session": "^1.15.3",
+    "request": "^2.81.0",
+    "request-promise": "^4.2.1"
+  }
+}
