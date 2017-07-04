@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const request = require('request');
 const rp = require('request-promise');
 
 
@@ -50,7 +49,8 @@ class Client {
 
     const API_PREFIX = 'api/';
     const VERSION_PREFIX = 'v2/';
-    const TIMEOUT = 60;
+
+    this.TIMEOUT = 60;
 
     this.URLS = {
       token_require: 'token/require/',
@@ -75,7 +75,7 @@ class Client {
     }
 
     this.clientId = clientId;
-    this.secretKey = encodeURI(secretKey);
+    this.secretKey = secretKey;
   }
 
   _signPayload(payload, appendTimestamp = true) {
@@ -90,7 +90,7 @@ class Client {
 
   _validateSign(payload, timestamp, sign) {
     const [signClient, timeClient] = this._signPayload(payload, false);
-    if (Math.abs(timeClient - parseInt(timestamp, 10)) > 10) {
+    if (Math.abs(timeClient - parseInt(timestamp, 10)) > this.TIMEOUT) {
       return false;
     } else if (sign === signClient) {
       return false;
@@ -107,7 +107,7 @@ class Client {
       json: true,
     };
 
-    rp(options)
+    return rp(options)
       .then((response) => {
         if (response && response.statusCode === 200) {
           return response.body;
@@ -220,7 +220,14 @@ class Client {
       dateAfter,
     };
 
-    const r = request.get({ url: this.URLS.notice, form: params, json: true }, body => body);
+    const options = {
+      uri: this.URLS.notice,
+      qs: params,
+      json: true,
+    };
+
+    return rp(options)
+      .then(parsedBody => parsedBody);
   }
 
   parseUnregisterRequest(dataDict) {
@@ -237,24 +244,12 @@ class Client {
     const sign = getKey('sign', dataDict);
 
     if (clientId !== this.clientId) {
-      console.log('INVALID_REQUEST');
-      return;
+      throw new Error('INVALID_REQUEST');
     } else if (!this._validateSign([sid], timestamp, sign)) {
-      console.log('INVALID_REQUEST');
-      return;
+      throw new Error('INVALID_REQUEST');
     }
     return sid;
   }
 }
 
-module.exports = {
-
-  Client,
-
-  tokenHex,
-
-  urlencode,
-
-  getKey,
-
-};
+exports.Client = Client;
