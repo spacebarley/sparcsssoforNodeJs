@@ -8,11 +8,14 @@ function tokenHex(length) {
   const possible = '0123456789abcdef';
 
   for (let i = 0; i < length * 2; i += 1) {
-    buf = crypto.randomBytes(1);
+    const buf = crypto.randomBytes(1);
     text += possible.charAt(Math.floor(buf[0] >> 4));
   }
 
   return text;
+  // return crypto.randomBytes(length)
+  //     .toString('hex')
+  //     .slice(0, length * 2)
 }
 
 // Functionally same with Python's urlencode from urllib.parse
@@ -78,9 +81,9 @@ class Client {
 
   _signPayload(payload, appendTimestamp = true) {
     const timestamp = parseInt(Date.now() / 1000, 10);
-    if (appendTimestamp) { payload.append(timestamp); }
+    if (appendTimestamp) { payload.push(timestamp); }
 
-    const msg = encodeURI(payload.map(toString).join(''));
+    const msg = payload.join('');
     const sign = crypto.createHmac('md5', this.secretKey).update(msg).digest('hex');
 
     return [sign, msg];
@@ -97,18 +100,22 @@ class Client {
   }
 
   static _postData(url, data) {
-    // https://github.com/request/request-promise 참고
     const options = {
       method: 'POST',
       uri: url,
       body: data,
-      json: true,
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+      },
     };
+
+    console.log('data is ')
+    console.log(data);
 
     return rp(options)
       .then((response) => {
         if (response && response.statusCode === 200) {
-          return response.body;
+          return JSON.parse(response.body);
         } else if (response && response.statusCode === 400) {
           throw new Error('INVALID_REQUEST');
         } else if (response && response.statusCode === 403) {
@@ -132,8 +139,9 @@ class Client {
     const state = tokenHex(10);
     const params = {
       client_id: this.clientId,
-      state: this.state,
+      state,
     };
+
     const url = [this.URLS.token_require, urlencode(params)].join('');
     return [url, state];
   }
@@ -151,7 +159,7 @@ class Client {
       timestamp,
       sign,
     };
-    return this._postData(this.URLS.token_info, params);
+    return this.constructor._postData(this.URLS.token_info, params);
   }
 
   getLogoutUrl(sid, redirectUri) {
@@ -201,7 +209,7 @@ class Client {
       timestamp,
       sign,
     };
-    return this._postData(this.URLS.point, params);
+    return this.constructor._postData(this.URLS.point, params);
   }
 
   getNotice(offset = 0, limit = 3, dateAfter = 0) {
