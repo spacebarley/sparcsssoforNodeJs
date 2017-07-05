@@ -1,5 +1,6 @@
 const crypto = require('crypto');
-const request = require('request');
+const rp = require('request-promise');
+
 
 // Functionally same with Python's token_hex from secrets
 function tokenHex(length) {
@@ -7,15 +8,14 @@ function tokenHex(length) {
   const possible = '0123456789abcdef';
 
   for (let i = 0; i < length * 2; i += 1) {
-    const buf = new Uint8Array(1);
-    crypto.getRandomValues(buf);
-    text += possible.charAt(Math.floor(buf[0] / 16));
+    buf = crypto.randomBytes(1);
+    text += possible.charAt(Math.floor(buf[0] >> 4));
   }
 
   return text;
 }
 
-// Functionally same with Python's urlencode from urllib.parse 
+// Functionally same with Python's urlencode from urllib.parse
 function urlencode(params) {
   let str = '?';
   for (const i in params) {
@@ -33,9 +33,8 @@ function getKey(value, dict) {
   return '';
 }
 
-
-const Client = function (clientId, secretKey, isBeta = false, serverAddr = '') {
-  function init() {
+class Client {
+  constructor(clientId, secretKey, isBeta = false, serverAddr = '') {
     /**
      * Initialize SPARCS SSO Client
      * @param {string} clientId your client id
@@ -43,43 +42,39 @@ const Client = function (clientId, secretKey, isBeta = false, serverAddr = '') {
      * @param {bool} isBeta true iff you want to use SPARCS SSO beta server
      * @param {string} serverAddr SPARCS SSO server addr (only for testing)
      */
+    const SERVER_DOMAIN = 'https://sparcssso.kaist.ac.kr/';
+    const BETA_DOMAIN = 'https://ssobeta.sparcs.org/';
+
+    const API_PREFIX = 'api/';
+    const VERSION_PREFIX = 'v2/';
+
+    this.TIMEOUT = 60;
+
+    this.URLS = {
+      token_require: 'token/require/',
+      token_info: 'token/info/',
+      logout: 'logout/',
+      unregister: 'unregister',
+      point: 'point/',
+      notice: 'notice/',
+    };
+
     if (serverAddr) {
       this.DOMAIN = serverAddr;
     } else if (isBeta) {
-      this.DOMAIN = this.BETA_DOMAIN;
+      this.DOMAIN = BETA_DOMAIN;
     } else {
-      this.DOMAIN = this.SERVER_DOMAIN;
+      this.DOMAIN = SERVER_DOMAIN;
     }
 
-    const baseUrl = [self.DOMAIN, self.API_PREFIX, self.VERSION_PREFIX].join('');
+    const baseUrl = [this.DOMAIN, API_PREFIX, VERSION_PREFIX].join('');
     for (const i in this.URLS) {
       this.URLS[i] = [baseUrl, this.URLS[i]].join('');
     }
 
     this.clientId = clientId;
-    this.secretKey = encodeURI(secretKey);
+    this.secretKey = secretKey;
   }
-
-  init();
-};
-
-Client.prototype = {
-  SERVER_DOMAIN: 'https://sparcssso.kaist.ac.kr/',
-  BETA_DOMAIN: 'https://ssobeta.sparcs.org/',
-  DOMAIN: null,
-
-  API_PREFIX: 'api/',
-  VERSION_PREFIX: 'v2/',
-  TIMEOUT: 60,
-
-  URLS: {
-    token_require: 'token/require/',
-    token_info: 'token/info/',
-    logout: 'logout/',
-    unregister: 'unregister/',
-    point: 'point/',
-    notice: 'notice/',
-  },
 
   _signPayload(payload, appendTimestamp = true) {
     const timestamp = parseInt(Date.now() / 1000, 10);
@@ -89,43 +84,47 @@ Client.prototype = {
     const sign = crypto.createHmac('md5', this.secretKey).update(msg).digest('hex');
 
     return [sign, msg];
-  },
+  }
 
   _validateSign(payload, timestamp, sign) {
     const [signClient, timeClient] = this._signPayload(payload, false);
-    if (Math.abs(timeClient - parseInt(timestamp, 10)) > 10) {
+    if (Math.abs(timeClient - parseInt(timestamp, 10)) > this.TIMEOUT) {
       return false;
     } else if (sign === signClient) {
       return false;
     }
     return true;
-  },
+  }
 
-  _postData(url, data) {
-    console.log('data is ');
-    console.log(data);
-    request.post({ url, form: data, json: true }, (response, body) => {
-      if (response && response.statusCode === 400) {
-        console.log('INVALID_REQUEST');
-        return;
-      } else if (response && response.statusCode === 403) {
-        console.log('NO_PERMISSION');
-        return;
-      } else if (response && response.statusCode !== 200) {
-        console.log('UNKNOWN_ERROR');
-        return;
-      }
+  static _postData(url, data) {
+    // https://github.com/request/request-promise 참고
+    const options = {
+      method: 'POST',
+      uri: url,
+      body: data,
+      json: true,
+    };
 
-      try {
-        return body;
-      } catch (e) {
-        console.log('INVALID_OBJECT');
-      }
-    });
-  },
+    return rp(options)
+      .then((response) => {
+        if (response && response.statusCode === 200) {
+          return response.body;
+        } else if (response && response.statusCode === 400) {
+          throw new Error('INVALID_REQUEST');
+        } else if (response && response.statusCode === 403) {
+          throw new Error('NO_PERMISSION');
+        } else {
+          throw new Error('UNKNOWN_ERROR');
+        }
+      })
+      .catch(() => {
+        throw new Error('INVALID OBJECT');
+      });
+  }
+
 
   getLoginParams() {
-    /** 
+    /**
      * Get login parameters for SPARCS SSO login
      * @return {list} [url, state] where url is a url to redirect user,
      *           and state is random string to prevent CSRF
@@ -137,7 +136,7 @@ Client.prototype = {
     };
     const url = [this.URLS.token_require, urlencode(params)].join('');
     return [url, state];
-  },
+  }
 
   getUserInfo(code) {
     /**
@@ -153,14 +152,14 @@ Client.prototype = {
       sign,
     };
     return this._postData(this.URLS.token_info, params);
-  },
+  }
 
   getLogoutUrl(sid, redirectUri) {
     /** Get a logout url to sign out a user
      * @param {string} sid: the user's service id
-     * @param {string} redirect_uri: a redirect uri after the user sign out  
+     * @param {string} redirect_uri: a redirect uri after the user sign out
      * @return {string} the final url to sign out a user
-     */ 
+     */
     const [sign, timestamp] = this._signPayload([sid, redirectUri]);
     const params = {
       client_id: this.clientId,
@@ -170,16 +169,16 @@ Client.prototype = {
       sign,
     };
     return [this.URLS.token_require, urlencode(params)].join('');
-  },
+  }
 
   getPoint(sid) {
     /**
      * Get a user's point
      * @param {string} sid the user's service id
      * @return the user's point
-     */        
+     */
     return this.modifyPoint(sid, 0, '').point;
-  },
+  }
 
   modifyPoint(sid, delta, message, lowerBound = 0) {
     /**
@@ -203,7 +202,7 @@ Client.prototype = {
       sign,
     };
     return this._postData(this.URLS.point, params);
-  },
+  }
 
   getNotice(offset = 0, limit = 3, dateAfter = 0) {
     /**
@@ -219,8 +218,15 @@ Client.prototype = {
       dateAfter,
     };
 
-    const r = request.get({ url: this.URLS.notice, form: params, json: true }, body => body);
-  },
+    const options = {
+      uri: this.URLS.notice,
+      qs: params,
+      json: true,
+    };
+
+    return rp(options)
+      .then(parsedBody => parsedBody);
+  }
 
   parseUnregisterRequest(dataDict) {
     /**
@@ -236,25 +242,12 @@ Client.prototype = {
     const sign = getKey('sign', dataDict);
 
     if (clientId !== this.clientId) {
-      console.log('INVALID_REQUEST');
-      return;
+      throw new Error('INVALID_REQUEST');
     } else if (!this._validateSign([sid], timestamp, sign)) {
-      console.log('INVALID_REQUEST');
-      return;
+      throw new Error('INVALID_REQUEST');
     }
     return sid;
-  },
-};
+  }
+}
 
-
-module.exports = {
-
-  Client,
-
-  tokenHex,
-
-  urlencode,
-
-  getKey,
-
-};
+module.exports = Client;
