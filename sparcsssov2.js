@@ -9,7 +9,7 @@ function tokenHex(length) {
 
   for (let i = 0; i < length * 2; i += 1) {
     const buf = crypto.randomBytes(1);
-    text += possible.charAt(Math.floor(buf[0] >> 4));
+    text += possible.charAt(Math.floor(buf[0] / 16));
   }
 
   return text;
@@ -86,7 +86,7 @@ class Client {
     const msg = payload.join('');
     const sign = crypto.createHmac('md5', this.secretKey).update(msg).digest('hex');
 
-    return [sign, msg];
+    return [sign, timestamp];
   }
 
   _validateSign(payload, timestamp, sign) {
@@ -99,33 +99,30 @@ class Client {
     return true;
   }
 
-  static _postData(url, data) {
+  static _postData(uri, form) {
     const options = {
       method: 'POST',
-      uri: url,
-      body: data,
+      uri,
+      form,
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
       },
     };
 
-    console.log('data is ')
-    console.log(data);
-
     return rp(options)
-      .then((response) => {
-        if (response && response.statusCode === 200) {
-          return JSON.parse(response.body);
-        } else if (response && response.statusCode === 400) {
-          throw new Error('INVALID_REQUEST');
-        } else if (response && response.statusCode === 403) {
-          throw new Error('NO_PERMISSION');
+      .then(body => JSON.parse(body))
+      .catch((e) => {
+        if (e.statusCode) {
+          if (e.statusCode === 400) {
+            throw new Error('INVALID_REQUEST');
+          } else if (e.statusCode === 403) {
+            throw new Error('NO_PERMISSION');
+          } else {
+            throw new Error('UNKNOWN_ERROR');
+          }
         } else {
-          throw new Error('UNKNOWN_ERROR');
+          throw new Error('INVALID_OBJECT');
         }
-      })
-      .catch(() => {
-        throw new Error('INVALID OBJECT');
       });
   }
 

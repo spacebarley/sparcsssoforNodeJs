@@ -25,45 +25,10 @@ function getKey(dict, key, replacement) {
   return replacement;
 }
 
-// function loginInit(req, res) {
-//   const sess = req.session;
-//   if (Object.prototype.hasOwnProperty.call(sess, 'authenticated') && sess.authenticated === true) {
-//     return res.redirect(getKey(sess, 'next', '/'));
-//   }
-//   const [loginUrl, state] = client.getLoginParams();
-//   sess.ssoState = state;
-//   return res.redirect(loginUrl);
-// }
-
-// function loginCallback(req, res) {
-//   const sess = req.session;
-//   const stateBefore = getKey(sess, 'ssoState', 'default');
-
-//   // 장고에서 request.GET.get(state, '')하는 부분인데, req.params가 정확히 dictionary 형식으로 return해주는지 모르겠음.
-//   const state = getKey(req.params, 'state', '');
-
-//   if (stateBefore !== state) {
-//     throw new Error('State changed');
-//   }
-
-//   const code = getKey(req.params, 'code', '');
-//   const profile = client.getUserInfo(code);
-
-
-//   let next;
-
-//   if (Object.prototype.hasOwnProperty.call(sess, 'next')) {
-//     next = sess.next;
-//     delete sess.next;
-//   } else {
-//     next = '/';
-//   }
-//   return res.redirect(next);
-// }
-
 app.get('/', (req, res) => {
-  console.log(req.session);
+  // console.log(req.session);
   res.send(req.session);
+  console.log(req.session);
   return req.session;
 });
 
@@ -74,9 +39,9 @@ app.get('/login', (req, res) => {
   }
   const [loginUrl, state] = client.getLoginParams();
   sess.ssoState = state;
-  console.log('sso state is ')
-  console.log(sess.ssoState)
-  console.log(state)
+  // console.log('sso state is ')
+  // console.log(sess.ssoState)
+  // console.log(state)
   return res.redirect(loginUrl);
 });
 
@@ -84,21 +49,20 @@ app.get('/login/callback', (req, res) => {
   const sess = req.session;
   const stateBefore = getKey(sess, 'ssoState', 'default');
 
-  // 장고에서 request.GET.get(state, '')하는 부분인데, req.params가 정확히 dictionary 형식으로 return해주는지 모르겠음.
   const state = getKey(req.query, 'state', '');
-  console.log('this state is session from ');
-  console.log(stateBefore);
-  console.log('this state is req.params from ');
-  console.log(state);
+  // console.log('this state is session from ');
+  // console.log(stateBefore);
+  // console.log('this state is req.params from ');
+  // console.log(state);
   if (stateBefore !== state) {
     throw new Error('State changed');
   }
 
   const code = getKey(req.query, 'code', '');
-  console.log('this code is req params from ');
-  console.log(code);
-  const profile = client.getUserInfo(code);
-
+  // console.log('this code is req params from ');
+  // console.log(code);
+  const profile = client.getUserInfo(code)
+  sess.authenticated = true;
 
   let next;
 
@@ -111,7 +75,17 @@ app.get('/login/callback', (req, res) => {
   return res.redirect(next);
 });
 
+app.get('/logout', (req, res) => {
+  const sess = req.session;
+  if (!sess.authenticated) {
+    console.log('REDIRECTED');
+    return res.redirect('/');
+  }
+  const sid = getKey(sess, 'sid', '');
+  client.getLogoutUrl(sid, '/');
+  return res.redirect('/');
+});
 
-let server = app.listen(3000, () =>  {
+const server = app.listen(3000, () => {
   console.log('Express server has started on port 3000');
 });
