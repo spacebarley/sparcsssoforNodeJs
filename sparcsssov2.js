@@ -100,6 +100,9 @@ class Client {
   }
 
   static _postData(uri, form) {
+    /**
+     * Usage: _postData(uri, form).then(body => body.key)
+     */
     const options = {
       method: 'POST',
       uri,
@@ -110,7 +113,7 @@ class Client {
     };
 
     return rp(options)
-      .then(body => JSON.parse(body))
+      .then(JSON.parse)
       .catch((e) => {
         if (e.statusCode) {
           if (e.statusCode === 400) {

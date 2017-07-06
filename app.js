@@ -1,17 +1,20 @@
 const express = require('express');
 const session = require('express-session');
 const Client = require('./sparcsssov2');
+// const MongoStore = require('connect-mongo')(session);
 
 const app = express();
 
+
 app.use(session({
-  key: 'sid',
+  key: 'destroyKey',
   resave: false,
   saveUninitialized: true,
   secret: 'secretkey',
   cookie: {
     maxAge: 1000 * 60 * 60, // 쿠키 유효기간 1시간
   },
+  // store: new MongoStore(options),
 }));
 
 const client = new Client('teste0b822cdafbe', '4a68305ccb64c7b944bc', false);
@@ -24,11 +27,8 @@ function getKey(dict, key, replacement) {
   }
   return replacement;
 }
-
 app.get('/', (req, res) => {
-  // console.log(req.session);
   res.send(req.session);
-  console.log(req.session);
   return req.session;
 });
 
@@ -39,9 +39,6 @@ app.get('/login', (req, res) => {
   }
   const [loginUrl, state] = client.getLoginParams();
   sess.ssoState = state;
-  // console.log('sso state is ')
-  // console.log(sess.ssoState)
-  // console.log(state)
   return res.redirect(loginUrl);
 });
 
@@ -50,29 +47,36 @@ app.get('/login/callback', (req, res) => {
   const stateBefore = getKey(sess, 'ssoState', 'default');
 
   const state = getKey(req.query, 'state', '');
-  // console.log('this state is session from ');
-  // console.log(stateBefore);
-  // console.log('this state is req.params from ');
-  // console.log(state);
   if (stateBefore !== state) {
     throw new Error('State changed');
   }
 
   const code = getKey(req.query, 'code', '');
-  // console.log('this code is req params from ');
-  // console.log(code);
-  const profile = client.getUserInfo(code)
-  sess.authenticated = true;
 
-  let next;
+  client.getUserInfo(code)
+          .then((resp) => {
+            sess.authenticated = true;
+            sess.sid = resp.sid;
+            if (resp.sparcs_id) {
+              sess.sparcsId = resp.sparcs_id;
+              sess.isSPARCS = true;
+            } else {
+              sess.isSPARCS = false;
+            }
+            console.log('=========================');
+            console.log(resp);
+            console.log('=========================');
+            console.log(sess);
 
-  if (Object.prototype.hasOwnProperty.call(sess, 'next')) {
-    next = sess.next;
-    delete sess.next;
-  } else {
-    next = '/';
-  }
-  return res.redirect(next);
+            let next;
+            if (Object.prototype.hasOwnProperty.call(sess, 'next')) {
+              next = sess.next;
+              delete sess.next;
+            } else {
+              next = '/';
+            }
+            return res.redirect(next);
+          });
 });
 
 app.get('/logout', (req, res) => {
@@ -83,6 +87,8 @@ app.get('/logout', (req, res) => {
   }
   const sid = getKey(sess, 'sid', '');
   client.getLogoutUrl(sid, '/');
+  req.session.destroy();
+  res.clearCookie('destroyKey');
   return res.redirect('/');
 });
 
